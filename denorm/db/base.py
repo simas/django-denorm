@@ -104,11 +104,10 @@ class Trigger(object):
 
     def name(self):
         return "_".join([
-            "denorm",
+            "d",
             self.time,
-            "row",
+            "r",
             self.event,
-            "on",
             self.db_table
         ])
 
