@@ -120,7 +120,7 @@ CREATE TRIGGER %(name)s
 class TriggerSet(base.TriggerSet):
     def drop(self):
         cursor = self.cursor()
-        cursor.execute("SELECT pg_class.relname, pg_trigger.tgname FROM pg_trigger LEFT JOIN pg_class ON (pg_trigger.tgrelid = pg_class.oid) WHERE pg_trigger.tgname LIKE 'denorm_%%';")
+        cursor.execute("SELECT pg_class.relname, pg_trigger.tgname FROM pg_trigger LEFT JOIN pg_class ON (pg_trigger.tgrelid = pg_class.oid) WHERE pg_trigger.tgname LIKE 'd_%%';")
         for table_name, trigger_name in cursor.fetchall():
             cursor.execute('DROP TRIGGER %s ON %s;' % (trigger_name, table_name))
             transaction.commit_unless_managed(using=self.using)
