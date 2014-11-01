@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 import abc
+import datetime
+import random
 
 from django.contrib.contenttypes.models import ContentType
 from denorm.db import triggers
@@ -185,7 +187,6 @@ class BaseCacheKeyDenorm(Denorm):
     def __init__(self, depend_on_related, *args, **kwargs):
         self.depend = depend_on_related
         super(BaseCacheKeyDenorm, self).__init__(*args, **kwargs)
-        import random
         self.func = lambda o: random.randint(-9223372036854775808, 9223372036854775807)
 
     def setup(self, **kwargs):
@@ -506,12 +507,51 @@ def flush():
     all denormalized fields have consistent data.
     """
 
+    # Remove denormalizing "locks" that were added
+    # more than 15 minutes ago.
+    now = datetime.datetime.now()
+    since = now - datetime.timedelta(minutes=15)
+    DirtyInstance.objects.filter(
+        denormalizing_lock_at__isnull=False,
+        denormalizing_lock_at__lt=since,
+    ).update(
+        denormalizing_id=None,
+        denormalizing_lock_at=None,
+    )
+
+    currently_denormalizing_agents_count = (
+        DirtyInstance.objects.
+        filter(denormalizing_id__isnull=False).
+        distinct(denormalizing_id).count()
+    )
+
+    # Getting too crowded?
+    if currently_denormalizing_agents_count > 3:
+        return
+
+    denormalizing_id = random.randint(1000000, 9999999)
+
     # Loop until break.
     # We may need multiple passes, because an update on one instance
     # may cause an other instance to be marked dirty (dependency chains)
     while True:
-        # Get all dirty markers
-        qs = DirtyInstance.objects.all()
+
+        # Lock up to 100 oldest rows
+        rows_for_update = DirtyInstance.objects.filter(
+            denormalizing_id=None,
+        ).order_by('id')[:100]
+
+        DirtyInstance.objects.filter(
+            pk__in=rows_for_update,
+        ).update(
+            denormalizing_id=denormalizing_id,
+            denormalizing_lock_at=now,
+        )
+
+        # Get objects to denormalize
+        qs = DirtyInstance.objects.filter(
+            denormalizing_id=denormalizing_id,
+        ).order_by('id')
 
         # DirtyInstance table is empty -> all data is consistent -> we're done
         if not qs:
@@ -519,7 +559,11 @@ def flush():
 
         # Call save() on all dirty instances, causing the self_save_handler()
         # getting called by the pre_save signal.
-        for dirty_instance in qs.iterator():
+        for dirty_instance in qs:
             if dirty_instance.content_object:
                 dirty_instance.content_object.save()
-            dirty_instance.delete()
+
+        # Delete denormalized objects dirty instance rows
+        DirtyInstance.objects.filter(
+            denormalizing_id=denormalizing_id,
+        ).delete()
