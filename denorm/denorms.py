@@ -6,9 +6,11 @@ import random
 from django.contrib.contenttypes.models import ContentType
 from denorm.db import triggers
 from django.db import connection
+from django.core.cache import cache
 from django.db.models import sql, ManyToManyField
 from django.db.models.aggregates import Sum
 from django.db.models.fields.related import ManyToManyField
+from django.db.models.loading import get_model
 from django.db.models.manager import Manager
 from denorm.models import DirtyInstance
 
@@ -507,7 +509,7 @@ def flush():
     all denormalized fields have consistent data.
     """
 
-    # Remove denormalizing "locks" that were added
+    # Remove denormalization "locks" that were added
     # more than 15 minutes ago.
     now = datetime.datetime.now()
     since = now - datetime.timedelta(minutes=15)
@@ -529,41 +531,110 @@ def flush():
     if currently_denormalizing_agents_count > 3:
         return
 
+    # Get all content types
+    content_types_dict = cache.get('denorm_content_types_dict')
+    if content_types_dict is None:
+        content_types_dict = {}
+        content_types = (
+            ContentType.objects.all().
+            values('id', 'app_label', 'model')
+        )
+        for content_type in content_types:
+            key = '%s.%s' % (
+                content_type['app_label'],
+                content_type['model'],
+            )
+            content_types_dict[key] = content_type
+        cache.set('content_types_dict', content_types_dict, 60)
+
+    CONTENT_TYPE_DENORMALIZATION_SEQUENCE = [
+        'product.productdenormalized',
+        None, # The rest
+    ]
+
+    SELECT_RELATED_FOR_CONTENT_TYPE = {
+        'product.productdenormalized': [
+            'product',
+            'product__slave_category'
+        ],
+    }
+
     denormalizing_id = random.randint(1000000, 9999999)
 
     # Loop until break.
     # We may need multiple passes, because an update on one instance
-    # may cause an other instance to be marked dirty (dependency chains)
+    # may cause an other instance to be marked dirty (dependency chains).
+    # Process 100 objects at a time.
     while True:
 
-        # Lock up to 100 oldest rows
-        rows_for_update = DirtyInstance.objects.filter(
-            denormalizing_id=None,
-        ).order_by('id')[:100]
+        objects_denormalized_count = 0
 
-        DirtyInstance.objects.filter(
-            pk__in=rows_for_update,
-        ).update(
-            denormalizing_id=denormalizing_id,
-            denormalizing_lock_at=now,
-        )
+        for content_type_key in CONTENT_TYPE_DENORMALIZATION_SEQUENCE:
 
-        # Get objects to denormalize
-        qs = DirtyInstance.objects.filter(
-            denormalizing_id=denormalizing_id,
-        ).order_by('id')
+            content_type = content_types_dict.get(content_type_key)
 
-        # DirtyInstance table is empty -> all data is consistent -> we're done
-        if not qs:
+            # 1) "Lock" oldest rows (up to 100)
+
+            rows_for_update = DirtyInstance.objects.filter(
+                denormalizing_id=None,
+            ).order_by('id')
+
+            if content_type is not None:
+                rows_for_update = rows_for_update.filter(
+                    content_type_id=content_type['id'],
+                )
+
+            rows_for_update = rows_for_update[:100]
+
+            DirtyInstance.objects.filter(
+                pk__in=rows_for_update,
+            ).update(
+                denormalizing_id=denormalizing_id,
+                denormalizing_lock_at=now,
+            )
+
+            # 3) Denormalize objects
+            # Call save() on all dirty instances, causing the
+            # self_save_handler() getting called by the pre_save signal.
+
+            if content_type is not None:
+                model = get_model(
+                    content_type['app_label'],
+                    content_type['model'],
+                )
+
+                qs = model.objects.filter(
+                    pk__in=list(DirtyInstance.objects.filter(
+                        denormalizing_id=denormalizing_id,
+                    ).values_list('object_id', flat=True))
+                )
+
+                select_related = SELECT_RELATED_FOR_CONTENT_TYPE.get(
+                    content_type_key
+                )
+
+                if select_related is not None:
+                    qs = qs.select_related(*select_related)
+
+                for obj in qs:
+                    obj.save()
+                    objects_denormalized_count += 1
+            else:
+                qs = DirtyInstance.objects.filter(
+                    denormalizing_id=denormalizing_id,
+                ).order_by('id')
+
+                for dirty_instance in qs:
+                    if dirty_instance.content_object:
+                        dirty_instance.content_object.save()
+                        objects_denormalized_count += 1
+
+            # 4) Delete denormalized objects dirty instance records
+
+            DirtyInstance.objects.filter(
+                denormalizing_id=denormalizing_id,
+            ).delete()
+
+        if objects_denormalized_count == 0:
+            # Data is consistent
             break
-
-        # Call save() on all dirty instances, causing the self_save_handler()
-        # getting called by the pre_save signal.
-        for dirty_instance in qs:
-            if dirty_instance.content_object:
-                dirty_instance.content_object.save()
-
-        # Delete denormalized objects dirty instance rows
-        DirtyInstance.objects.filter(
-            denormalizing_id=denormalizing_id,
-        ).delete()
