@@ -524,7 +524,7 @@ def flush():
     currently_denormalizing_agents_count = (
         DirtyInstance.objects.
         filter(denormalizing_id__isnull=False).
-        distinct(denormalizing_id).count()
+        distinct('denormalizing_id').count()
     )
 
     # Getting too crowded?
