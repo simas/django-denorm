@@ -49,7 +49,6 @@ class Command(NoArgsCommand):
             else:
                 raise
 
-    @transaction.commit_manually
     def handle_noargs(self, **options):
         foreground = options['foreground']
         interval = options['interval']
@@ -66,7 +65,5 @@ class Command(NoArgsCommand):
             try:
                 denorms.flush()
                 sleep(interval)
-                transaction.commit()
             except KeyboardInterrupt:
-                transaction.commit()
                 sys.exit()
