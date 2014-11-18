@@ -3,6 +3,7 @@ import abc
 import datetime
 import random
 
+import logging
 from django.contrib.contenttypes.models import ContentType
 from denorm.db import triggers
 from django.db import connection
@@ -27,6 +28,9 @@ from django.db.models.sql.where import WhereNode
 # Remember all denormalizations.
 # This is used to rebuild all denormalized values in the whole DB.
 alldenorms = []
+
+
+log = logging.getLogger(__name__)
 
 
 def many_to_many_pre_save(sender, instance, **kwargs):
@@ -556,7 +560,8 @@ def flush():
     SELECT_RELATED_FOR_CONTENT_TYPE = {
         'product.productdenormalized': [
             'product',
-            'product__slave_category'
+            'product__master_category',
+            'product__slave_category__merged_with',
         ],
     }
 
@@ -621,9 +626,19 @@ def flush():
                     if select_related is not None:
                         qs = qs.select_related(*select_related)
 
-                    for obj in qs:
-                        obj.save()
-                        objects_denormalized_count += 1
+                    objects = list(qs)
+
+                    transaction.commit()
+
+                    for obj in objects:
+                        try:
+                            obj.save()
+                            # XXX: how to catch errors? TransactionManagementError does not give in
+                            # XXX: don't remove objects from DirtyInstance if it errored on save
+                        except Exception, e:
+                            log.error('Denormalizing error: %s' % e, exc_info=1)
+                        else:
+                            objects_denormalized_count += 1
                 else:
                     qs = DirtyInstance.objects.filter(
                         denormalizing_id=denormalizing_id,
