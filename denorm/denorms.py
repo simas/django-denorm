@@ -21,7 +21,6 @@ from denorm.models import DirtyInstance
 from django.db.models.query_utils import Q
 from django.db.models.sql import Query
 from django.db.models.sql.compiler import SQLCompiler
-from django.db.models.sql.constants import JoinInfo
 from django.db.models.sql.query import Query
 from django.db.models.sql.where import WhereNode
 
