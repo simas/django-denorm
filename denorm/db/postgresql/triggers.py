@@ -122,8 +122,8 @@ class TriggerSet(base.TriggerSet):
         cursor = self.cursor()
         cursor.execute("SELECT pg_class.relname, pg_trigger.tgname FROM pg_trigger LEFT JOIN pg_class ON (pg_trigger.tgrelid = pg_class.oid) WHERE pg_trigger.tgname LIKE 'd_%%';")
         for table_name, trigger_name in cursor.fetchall():
-            cursor.execute('DROP TRIGGER %s ON %s;' % (trigger_name, table_name))
-            transaction.commit_unless_managed(using=self.using)
+            with transaction.atomic():
+                cursor.execute('DROP TRIGGER %s ON %s;' % (trigger_name, table_name))
 
     def install(self):
         cursor = self.cursor()
@@ -132,5 +132,5 @@ class TriggerSet(base.TriggerSet):
             cursor.execute('CREATE LANGUAGE plpgsql')
         for name, trigger in self.triggers.iteritems():
             sql, args = trigger.sql()
-            cursor.execute(sql, args)
-            transaction.commit_unless_managed(using=self.using)
+            with transaction.atomic():
+                cursor.execute(sql, args)
