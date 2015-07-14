@@ -580,7 +580,7 @@ def flush():
     # Process 100 objects at a time.
     while True:
 
-        with transaction.commit_manually():
+        with transaction.atomic():
 
             objects_denormalized_count = 0
 
@@ -608,8 +608,6 @@ def flush():
                     denormalizing_lock_at=now,
                 )
 
-                transaction.commit()
-
                 # 3) Denormalize objects
                 # Call save() on all dirty instances, causing the
                 # self_save_handler() getting called by the pre_save signal.
@@ -635,8 +633,6 @@ def flush():
 
                     objects = list(qs)
 
-                    transaction.commit()
-
                     for obj in objects:
                         try:
                             obj.save()
@@ -661,8 +657,6 @@ def flush():
                 DirtyInstance.objects.filter(
                     denormalizing_id=denormalizing_id,
                 ).delete()
-
-                transaction.commit()
 
             if objects_denormalized_count == 0:
                 # Data is consistent

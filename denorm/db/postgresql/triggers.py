@@ -64,7 +64,8 @@ class Trigger(base.Trigger):
         for a in self.actions:
             sql, action_params = a.sql()
             if sql:
-                action_list.append(sql)
+                if sql not in action_list:
+                    action_list.append(sql)
                 params.extend(action_params)
         actions = ";\n   ".join(action_list) + ';'
         table = self.db_table
