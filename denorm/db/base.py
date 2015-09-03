@@ -96,7 +96,14 @@ class Trigger(object):
                 if hasattr(k, 'field'):
                     continue
                     field = k.field
-                if not v and field.attname not in skip:
+                if hasattr(k, 'm2m_column_name') and k.name not in skip:
+                    self.fields.append(
+                        (
+                            k,
+                            'm2m'
+                        )
+                    )
+                elif not v and field.attname not in skip:
                     self.fields.append(
                         (
                             field.attname,

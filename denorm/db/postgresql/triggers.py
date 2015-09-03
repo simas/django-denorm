@@ -83,10 +83,12 @@ class Trigger(base.Trigger):
                     # then compare it as text - Fixes a problem of trying to
                     # compare PostGIS geometry fields.
                     conditions.append("(OLD.%(f)s::%(t)s IS DISTINCT FROM NEW.%(f)s::%(t)s)" % {'f': field, 't': 'text'})
+                    conditions = ["(%s)" % "OR".join(conditions)]
+                elif native_type == 'm2m':
+                    pass
                 else:
                     conditions.append("( OLD.%(f)s IS DISTINCT FROM NEW.%(f)s )" % {'f': field})
-
-            conditions = ["(%s)" % "OR".join(conditions)]
+                    conditions = ["(%s)" % "OR".join(conditions)]
 
         if ct_field:
             if event == "UPDATE":
