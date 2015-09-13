@@ -151,7 +151,7 @@ def daemonize(noClose=False, pidfile=None):
             # Original child. Exit.
             if pidfile:
                 print(pid)
-                file(pidfile, "w").write(str(pid))
+                open(pidfile, "w").write(str(pid))
             os._exit(0)
 
         # This is the second child. Set the umask.
