@@ -17,6 +17,9 @@ class DirtyInstance(models.Model):
     denormalizing_id = models.IntegerField(null=True, blank=True)
     denormalizing_lock_at = models.DateTimeField(null=True, blank=True)
 
+    def __str__(self):
+        return u'DirtyInstance: %s,%s' % (self.content_type, self.object_id)
+
     def __unicode__(self):
         return u'DirtyInstance: %s,%s' % (self.content_type, self.object_id)
 

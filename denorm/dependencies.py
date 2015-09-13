@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import six
 from denorm.helpers import find_fks, find_m2ms
 from django.db import models
 from django.db.models.fields import related
@@ -40,7 +41,7 @@ class DependOnRelated(DenormDependency):
         if self.other_model == related.RECURSIVE_RELATIONSHIP_CONSTANT:
             self.other_model = self.this_model
 
-        if isinstance(self.other_model, (str, unicode)):
+        if isinstance(self.other_model, six.string_types):
             # if ``other_model`` is a string, it certainly is a lazy relation.
             related.add_lazy_relation(self.this_model, None, self.other_model, self.resolved_model)
         else:
