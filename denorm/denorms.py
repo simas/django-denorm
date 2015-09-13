@@ -116,7 +116,6 @@ class Denorm(object):
                         new_pks.add(x)
 
                 if old_pks != new_pks:
-                    print old_pks
                     for o in qs.filter(pk=instance.pk):
                         o.attname = new_value
                     instance.save()
@@ -294,9 +293,9 @@ class AggregateDenorm(Denorm):
     def get_related_where(self, fk_name, using, type):
         related_where = ["%s=%s.%s" % (self.model._meta.pk.get_attname_column()[1], type, fk_name)]
         related_query = Query(self.manager.related.model)
-        for name, value in self.filter.iteritems():
+        for name, value in self.filter.items():
             related_query.add_q(Q(**{name: value}))
-        for name, value in self.exclude.iteritems():
+        for name, value in self.exclude.items():
             related_query.add_q(~Q(**{name: value}))
         related_query.add_extra(None, None,
             ["%s=%s.%s" % (self.model._meta.pk.get_attname_column()[1], type, self.manager.related.field.m2m_column_name())],
@@ -487,7 +486,8 @@ def rebuildall(verbose=False, model_name=None):
     for i, denorm in enumerate(alldenorms):
         if model_name is None or denorm.model.__name__ == model_name:
             if verbose:
-                print 'rebuilding', '%s/%s' % (i + 1, len(alldenorms)), denorm.fieldname, 'in', denorm.model
+                msg = 'rebuilding', '%s/%s' % (i + 1, len(alldenorms)), denorm.fieldname, 'in', denorm.model
+                print(msg)
             denorm.update(denorm.model.objects.all())
 
 
@@ -638,7 +638,7 @@ def flush():
                             obj.save()
                             # XXX: how to catch errors? TransactionManagementError does not give in
                             # XXX: don't remove objects from DirtyInstance if it errored on save
-                        except Exception, e:
+                        except Exception as e:
                             log.error('Denormalizing error: %s' % e, exc_info=1)
                         else:
                             objects_denormalized_count += 1
